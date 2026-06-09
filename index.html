@@ -23,37 +23,31 @@
 </head>
 <body>
   <h3>Gemini AI Insights</h3>
-  <button id="btn" onclick="analyzeData()">Analyze Dashboard Data</button>
+  <button id="btn" onclick="analyzeData()" disabled>Analyze Dashboard Data</button>
   <div id="status">Initializing...</div>
   <div id="insight-box">Your AI insights will appear here...</div>
 
+  <script src="https://cdn.jsdelivr.net/npm/tableau.extensions.api@1/lib/tableau.extensions.1.latest.min.js"></script>
   <script>
     const BACKEND_URL = "https://gemini-tableau-backend-295295212350.us-central1.run.app";
 
-    // Tableau injects the `tableau` object into the iframe automatically.
-    // We just need to wait for it to be available then call initializeAsync.
-    function waitForTableau(callback, retries) {
-      retries = retries || 0;
-      if (typeof tableau !== "undefined" && tableau.extensions) {
-        callback();
-      } else if (retries < 50) {
-        setTimeout(function () { waitForTableau(callback, retries + 1); }, 100);
-      } else {
-        document.getElementById("status").textContent =
-          "Could not connect to Tableau. Open this inside a dashboard.";
-      }
-    }
+    // Store dashboard reference globally after init
+    let _dashboard = null;
 
-    waitForTableau(function () {
-      tableau.extensions.initializeAsync().then(function () {
-        document.getElementById("status").textContent =
-          "Connected: " + tableau.extensions.dashboardContent.dashboard.name;
-      }).catch(function (err) {
-        document.getElementById("status").textContent = "Init error: " + err.message;
-      });
+    tableau.extensions.initializeAsync().then(function () {
+      _dashboard = tableau.extensions.dashboardContent.dashboard;
+      document.getElementById("status").textContent = "Connected: " + _dashboard.name;
+      document.getElementById("btn").disabled = false;
+    }).catch(function (err) {
+      document.getElementById("status").textContent = "Init error: " + err.message;
+      document.getElementById("btn").disabled = false;
     });
 
     async function analyzeData() {
+      if (!_dashboard) {
+        document.getElementById("insight-box").textContent = "Not connected to Tableau yet.";
+        return;
+      }
       const btn = document.getElementById("btn");
       const status = document.getElementById("status");
       const box = document.getElementById("insight-box");
@@ -61,9 +55,8 @@
       status.textContent = "Reading dashboard data...";
       box.textContent = "";
       try {
-        const dashboard = tableau.extensions.dashboardContent.dashboard;
-        let dataText = "Dashboard: " + dashboard.name + "\n\n";
-        for (const ws of dashboard.worksheets) {
+        let dataText = "Dashboard: " + _dashboard.name + "\n\n";
+        for (const ws of _dashboard.worksheets) {
           status.textContent = "Reading: " + ws.name + "...";
           const data = await ws.getSummaryDataAsync();
           const cols = data.columns.map(c => c.fieldName);
