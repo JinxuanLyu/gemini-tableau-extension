@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Gemini AI Insights</title>
+  <script src="https://cdn.jsdelivr.net/npm/tableau.extensions.api@1/lib/tableau.extensions.1.latest.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; padding: 16px; background: #f8f9fa; color: #333; }
+    h3 { font-size: 15px; margin-bottom: 12px; }
+    button {
+      width: 100%; padding: 10px; background: #4285F4;
+      color: white; border: none; border-radius: 6px;
+      font-size: 14px; cursor: pointer;
+    }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #status { margin: 10px 0; font-size: 12px; color: #888; min-height: 18px; }
+    #insight-box {
+      background: white; border: 1px solid #ddd; border-radius: 8px;
+      padding: 14px; font-size: 13px; line-height: 1.6;
+      min-height: 80px; white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h3>Gemini AI Insights</h3>
+  <button id="btn" onclick="analyzeData()">Analyze Dashboard Data</button>
+  <div id="status">Ready.</div>
+  <div id="insight-box">Your AI insights will appear here...</div>
+
+  <script>
+    const BACKEND_URL = "https://gemini-tableau-backend-295295212350.us-central1.run.app";
+
+    tableau.extensions.initializeAsync().then(() => {
+      document.getElementById("status").textContent =
+        "Connected: " + tableau.extensions.dashboardContent.dashboard.name;
+    }).catch(err => {
+      document.getElementById("status").textContent = "Init error: " + err.message;
+    });
+
+    async function analyzeData() {
+      const btn = document.getElementById("btn");
+      const status = document.getElementById("status");
+      const box = document.getElementById("insight-box");
+      btn.disabled = true;
+      status.textContent = "Reading dashboard data...";
+      box.textContent = "";
+      try {
+        const dashboard = tableau.extensions.dashboardContent.dashboard;
+        let dataText = "Dashboard: " + dashboard.name + "\n\n";
+        for (const ws of dashboard.worksheets) {
+          status.textContent = "Reading: " + ws.name + "...";
+          const data = await ws.getSummaryDataAsync();
+          const cols = data.columns.map(c => c.fieldName);
+          dataText += "--- " + ws.name + " ---\n";
+          dataText += "Columns: " + cols.join(", ") + "\n";
+          data.data.slice(0, 50).forEach(row => {
+            dataText += row.map(c => c.formattedValue).join(" | ") + "\n";
+          });
+          dataText += "\n";
+        }
+        status.textContent = "Sending to Gemini...";
+        const res = await fetch(BACKEND_URL + "/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: dataText })
+        });
+        if (!res.ok) throw new Error("Server returned " + res.status);
+        const result = await res.json();
+        box.textContent = result.insight;
+        status.textContent = "Done!";
+      } catch (err) {
+        box.textContent = "Error: " + err.message;
+        status.textContent = "Something went wrong.";
+      } finally {
+        btn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
