@@ -25,52 +25,42 @@
 </head>
 <body>
   <h3>Gemini AI Insights</h3>
-  <button id="btn" disabled>Analyze Dashboard Data</button>
-  <div id="status">Initializing...</div>
+  <button id="btn">Analyze Dashboard Data</button>
+  <div id="status">Ready.</div>
   <div id="insight-box">Your AI insights will appear here...</div>
 
   <script>
     var BACKEND_URL = "https://gemini-tableau-backend-295295212350.us-central1.run.app";
-    var _dashboard = null;
-
-    $(document).ready(function () {
-      tableau.extensions.initializeAsync().then(function () {
-        _dashboard = tableau.extensions.dashboardContent.dashboard;
-        $("#status").text("Connected: " + _dashboard.name);
-        $("#btn").prop("disabled", false);
-      }, function (err) {
-        $("#status").text("Init error: " + err.toString());
-        $("#btn").prop("disabled", false);
-      });
-    });
 
     $("#btn").click(function () {
-      if (!_dashboard) {
-        $("#insight-box").text("Not connected to Tableau yet.");
-        return;
-      }
-      var $btn = $("#btn");
+      var $btn = $(this);
       var $status = $("#status");
       var $box = $("#insight-box");
+
       $btn.prop("disabled", true);
-      $status.text("Reading dashboard data...");
+      $status.text("Initializing...");
       $box.text("");
 
-      var dataText = "Dashboard: " + _dashboard.name + "\n\n";
-      var promises = _dashboard.worksheets.map(function (ws) {
-        $status.text("Reading: " + ws.name + "...");
-        return ws.getSummaryDataAsync().then(function (data) {
-          var cols = data.columns.map(function (c) { return c.fieldName; });
-          dataText += "--- " + ws.name + " ---\n";
-          dataText += "Columns: " + cols.join(", ") + "\n";
-          data.data.slice(0, 50).forEach(function (row) {
-            dataText += row.map(function (c) { return c.formattedValue; }).join(" | ") + "\n";
-          });
-          dataText += "\n";
-        });
-      });
+      tableau.extensions.initializeAsync().then(function () {
+        var dashboard = tableau.extensions.dashboardContent.dashboard;
+        $status.text("Reading data from: " + dashboard.name);
 
-      Promise.all(promises).then(function () {
+        var dataText = "Dashboard: " + dashboard.name + "\n\n";
+        var promises = dashboard.worksheets.map(function (ws) {
+          return ws.getSummaryDataAsync().then(function (data) {
+            var cols = data.columns.map(function (c) { return c.fieldName; });
+            dataText += "--- " + ws.name + " ---\n";
+            dataText += "Columns: " + cols.join(", ") + "\n";
+            data.data.slice(0, 50).forEach(function (row) {
+              dataText += row.map(function (c) { return c.formattedValue; }).join(" | ") + "\n";
+            });
+            dataText += "\n";
+          });
+        });
+
+        return Promise.all(promises).then(function () { return dataText; });
+
+      }).then(function (dataText) {
         $status.text("Sending to Gemini...");
         return fetch(BACKEND_URL + "/analyze", {
           method: "POST",
