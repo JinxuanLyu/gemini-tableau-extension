@@ -27,16 +27,28 @@
   <div id="status">Initializing...</div>
   <div id="insight-box">Your AI insights will appear here...</div>
 
-  <script src="https://extensionsgallery.tableau.com/tableau.extensions.1.latest.min.js"></script>
-
   <script>
     const BACKEND_URL = "https://gemini-tableau-backend-295295212350.us-central1.run.app";
 
-    document.addEventListener("DOMContentLoaded", function () {
-      tableau.extensions.initializeAsync().then(() => {
+    // Tableau injects the `tableau` object into the iframe automatically.
+    // We just need to wait for it to be available then call initializeAsync.
+    function waitForTableau(callback, retries) {
+      retries = retries || 0;
+      if (typeof tableau !== "undefined" && tableau.extensions) {
+        callback();
+      } else if (retries < 50) {
+        setTimeout(function () { waitForTableau(callback, retries + 1); }, 100);
+      } else {
+        document.getElementById("status").textContent =
+          "Could not connect to Tableau. Open this inside a dashboard.";
+      }
+    }
+
+    waitForTableau(function () {
+      tableau.extensions.initializeAsync().then(function () {
         document.getElementById("status").textContent =
           "Connected: " + tableau.extensions.dashboardContent.dashboard.name;
-      }).catch(err => {
+      }).catch(function (err) {
         document.getElementById("status").textContent = "Init error: " + err.message;
       });
     });
