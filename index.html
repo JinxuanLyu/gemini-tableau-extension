@@ -3,8 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <title>Gemini AI Insights</title>
-  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/tableau.extensions.api@1.13.0/lib/tableau.extensions.1.latest.min.js"></script>
+  <script src="./tableau.extensions.1.latest.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: sans-serif; padding: 16px; background: #f8f9fa; color: #333; }
@@ -25,43 +24,47 @@
 </head>
 <body>
   <h3>Gemini AI Insights</h3>
-  <button id="btn">Analyze Dashboard Data</button>
-  <div id="status">Ready.</div>
+  <button id="btn" disabled>Analyze Dashboard Data</button>
+  <div id="status">Initializing...</div>
   <div id="insight-box">Your AI insights will appear here...</div>
 
   <script>
     var BACKEND_URL = "https://gemini-tableau-backend-295295212350.us-central1.run.app";
+    var _dashboard = null;
 
-    $("#btn").click(function () {
-      var $btn = $(this);
-      var $status = $("#status");
-      var $box = $("#insight-box");
+    tableau.extensions.initializeAsync().then(function () {
+      _dashboard = tableau.extensions.dashboardContent.dashboard;
+      document.getElementById("status").textContent = "Connected: " + _dashboard.name;
+      document.getElementById("btn").disabled = false;
+    }, function (err) {
+      document.getElementById("status").textContent = "Init error: " + err.toString();
+      document.getElementById("btn").disabled = false;
+    });
 
-      $btn.prop("disabled", true);
-      $status.text("Initializing...");
-      $box.text("");
+    document.getElementById("btn").addEventListener("click", function () {
+      if (!_dashboard) { return; }
+      var btn = document.getElementById("btn");
+      var status = document.getElementById("status");
+      var box = document.getElementById("insight-box");
+      btn.disabled = true;
+      status.textContent = "Reading data...";
+      box.textContent = "";
 
-      tableau.extensions.initializeAsync().then(function () {
-        var dashboard = tableau.extensions.dashboardContent.dashboard;
-        $status.text("Reading data from: " + dashboard.name);
-
-        var dataText = "Dashboard: " + dashboard.name + "\n\n";
-        var promises = dashboard.worksheets.map(function (ws) {
-          return ws.getSummaryDataAsync().then(function (data) {
-            var cols = data.columns.map(function (c) { return c.fieldName; });
-            dataText += "--- " + ws.name + " ---\n";
-            dataText += "Columns: " + cols.join(", ") + "\n";
-            data.data.slice(0, 50).forEach(function (row) {
-              dataText += row.map(function (c) { return c.formattedValue; }).join(" | ") + "\n";
-            });
-            dataText += "\n";
+      var dataText = "Dashboard: " + _dashboard.name + "\n\n";
+      var promises = _dashboard.worksheets.map(function (ws) {
+        return ws.getSummaryDataAsync().then(function (data) {
+          var cols = data.columns.map(function (c) { return c.fieldName; });
+          dataText += "--- " + ws.name + " ---\n";
+          dataText += "Columns: " + cols.join(", ") + "\n";
+          data.data.slice(0, 50).forEach(function (row) {
+            dataText += row.map(function (c) { return c.formattedValue; }).join(" | ") + "\n";
           });
+          dataText += "\n";
         });
+      });
 
-        return Promise.all(promises).then(function () { return dataText; });
-
-      }).then(function (dataText) {
-        $status.text("Sending to Gemini...");
+      Promise.all(promises).then(function () {
+        status.textContent = "Sending to Gemini...";
         return fetch(BACKEND_URL + "/analyze", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -71,13 +74,13 @@
         if (!res.ok) throw new Error("Server returned " + res.status);
         return res.json();
       }).then(function (result) {
-        $box.text(result.insight);
-        $status.text("Done!");
+        box.textContent = result.insight;
+        status.textContent = "Done!";
       }).catch(function (err) {
-        $box.text("Error: " + err.message);
-        $status.text("Something went wrong.");
+        box.textContent = "Error: " + err.message;
+        status.textContent = "Something went wrong.";
       }).finally(function () {
-        $btn.prop("disabled", false);
+        btn.disabled = false;
       });
     });
   </script>
