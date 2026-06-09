@@ -3,24 +3,93 @@
 <head>
   <meta charset="UTF-8">
   <title>Gemini AI Insights</title>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tableau.extensions.api@1.13.0/lib/tableau.extensions.1.latest.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: sans-serif; padding: 16px; background: #f8f9fa; color: #333; }
+    h3 { font-size: 15px; margin-bottom: 12px; }
+    button {
+      width: 100%; padding: 10px; background: #4285F4;
+      color: white; border: none; border-radius: 6px;
+      font-size: 14px; cursor: pointer;
+    }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+    #status { margin: 10px 0; font-size: 12px; color: #888; min-height: 18px; }
+    #insight-box {
+      background: white; border: 1px solid #ddd; border-radius: 8px;
+      padding: 14px; font-size: 13px; line-height: 1.6;
+      min-height: 80px; white-space: pre-wrap;
+    }
+  </style>
 </head>
 <body>
-  <p id="msg">Loading...</p>
-  <script src="https://cdn.jsdelivr.net/npm/tableau.extensions.api@1/lib/tableau.extensions.1.latest.min.js"></script>
-  <script>
-    var msg = document.getElementById("msg");
-    msg.textContent = "Script loaded. tableau defined: " + (typeof tableau !== "undefined");
+  <h3>Gemini AI Insights</h3>
+  <button id="btn" disabled>Analyze Dashboard Data</button>
+  <div id="status">Initializing...</div>
+  <div id="insight-box">Your AI insights will appear here...</div>
 
-    if (typeof tableau !== "undefined") {
-      msg.textContent = "Calling initializeAsync...";
-      tableau.extensions.initializeAsync().then(function() {
-        msg.textContent = "SUCCESS: " + tableau.extensions.dashboardContent.dashboard.name;
-      }).catch(function(e) {
-        msg.textContent = "CATCH: " + e.message;
+  <script>
+    var BACKEND_URL = "https://gemini-tableau-backend-295295212350.us-central1.run.app";
+    var _dashboard = null;
+
+    $(document).ready(function () {
+      tableau.extensions.initializeAsync().then(function () {
+        _dashboard = tableau.extensions.dashboardContent.dashboard;
+        $("#status").text("Connected: " + _dashboard.name);
+        $("#btn").prop("disabled", false);
+      }, function (err) {
+        $("#status").text("Init error: " + err.toString());
+        $("#btn").prop("disabled", false);
       });
-    } else {
-      msg.textContent = "FAIL: tableau is not defined";
-    }
+    });
+
+    $("#btn").click(function () {
+      if (!_dashboard) {
+        $("#insight-box").text("Not connected to Tableau yet.");
+        return;
+      }
+      var $btn = $("#btn");
+      var $status = $("#status");
+      var $box = $("#insight-box");
+      $btn.prop("disabled", true);
+      $status.text("Reading dashboard data...");
+      $box.text("");
+
+      var dataText = "Dashboard: " + _dashboard.name + "\n\n";
+      var promises = _dashboard.worksheets.map(function (ws) {
+        $status.text("Reading: " + ws.name + "...");
+        return ws.getSummaryDataAsync().then(function (data) {
+          var cols = data.columns.map(function (c) { return c.fieldName; });
+          dataText += "--- " + ws.name + " ---\n";
+          dataText += "Columns: " + cols.join(", ") + "\n";
+          data.data.slice(0, 50).forEach(function (row) {
+            dataText += row.map(function (c) { return c.formattedValue; }).join(" | ") + "\n";
+          });
+          dataText += "\n";
+        });
+      });
+
+      Promise.all(promises).then(function () {
+        $status.text("Sending to Gemini...");
+        return fetch(BACKEND_URL + "/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ data: dataText })
+        });
+      }).then(function (res) {
+        if (!res.ok) throw new Error("Server returned " + res.status);
+        return res.json();
+      }).then(function (result) {
+        $box.text(result.insight);
+        $status.text("Done!");
+      }).catch(function (err) {
+        $box.text("Error: " + err.message);
+        $status.text("Something went wrong.");
+      }).finally(function () {
+        $btn.prop("disabled", false);
+      });
+    });
   </script>
 </body>
 </html>
