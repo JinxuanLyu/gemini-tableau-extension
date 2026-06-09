@@ -3,7 +3,6 @@
 <head>
   <meta charset="UTF-8">
   <title>Gemini AI Insights</title>
-  <script src="https://cdn.jsdelivr.net/npm/tableau.extensions.api@1/lib/tableau.extensions.1.latest.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: sans-serif; padding: 16px; background: #f8f9fa; color: #333; }
@@ -25,17 +24,21 @@
 <body>
   <h3>Gemini AI Insights</h3>
   <button id="btn" onclick="analyzeData()">Analyze Dashboard Data</button>
-  <div id="status">Ready.</div>
+  <div id="status">Initializing...</div>
   <div id="insight-box">Your AI insights will appear here...</div>
+
+  <script src="https://extensionsgallery.tableau.com/tableau.extensions.1.latest.min.js"></script>
 
   <script>
     const BACKEND_URL = "https://gemini-tableau-backend-295295212350.us-central1.run.app";
 
-    tableau.extensions.initializeAsync().then(() => {
-      document.getElementById("status").textContent =
-        "Connected: " + tableau.extensions.dashboardContent.dashboard.name;
-    }).catch(err => {
-      document.getElementById("status").textContent = "Init error: " + err.message;
+    document.addEventListener("DOMContentLoaded", function () {
+      tableau.extensions.initializeAsync().then(() => {
+        document.getElementById("status").textContent =
+          "Connected: " + tableau.extensions.dashboardContent.dashboard.name;
+      }).catch(err => {
+        document.getElementById("status").textContent = "Init error: " + err.message;
+      });
     });
 
     async function analyzeData() {
